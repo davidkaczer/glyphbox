@@ -14,6 +14,17 @@ if TYPE_CHECKING:
     from .environment import NLEWrapper
 
 
+# Messages meaning the game refused a command, so no turn passed
+REFUSAL_PREFIXES = (
+    "You don't have",
+    "You do not have",
+    "You aren't carrying",
+    "You are not wearing",
+    "You don't know any spells",
+    "Never mind",
+)
+
+
 class ActionExecutor:
     """
     Executes actions in the NLE environment.
@@ -140,6 +151,46 @@ class ActionExecutor:
             return False
         message = obs.get_message()
         return "or ?*]" in message or "?*]" in message
+
+    def _is_direction_prompt(self) -> bool:
+        """
+        Check for the direction prompt: "In what direction?".
+
+        The top line is checked as well as the message, because the prompt is
+        not always reflected in NLE's misc flags.
+        """
+        obs = self.env.last_observation
+        if obs is None:
+            return False
+        if "In what direction" in obs.get_message():
+            return True
+        top_line = bytes(obs.tty_chars[0]).decode(errors="ignore")
+        return "In what direction" in top_line
+
+    def _is_ground_food_prompt(self) -> bool:
+        """Check for the food-on-the-floor prompt: "There is a lichen corpse here; eat it? [ynq]"."""
+        obs = self.env.last_observation
+        if obs is None:
+            return False
+        if not obs.in_yn_prompt:
+            return False
+        return "eat it?" in obs.get_message()
+
+    def _is_spell_menu(self) -> bool:
+        """Check if the "Choose which spell to cast" menu is showing."""
+        obs = self.env.last_observation
+        if obs is None:
+            return False
+        return "Choose which spell to cast" in obs.get_screen()
+
+    def _is_ring_hand_prompt(self) -> bool:
+        """Check for the ring prompt: "Which ring-finger, Right or Left? [rl]"."""
+        obs = self.env.last_observation
+        if obs is None:
+            return False
+        if not obs.in_yn_prompt:
+            return False
+        return "ring-finger" in obs.get_message()
 
     def _is_getlin_prompt(self) -> bool:
         """Check if the game is waiting for text input using NLE misc flags."""
@@ -720,7 +771,7 @@ class ActionExecutor:
         if key is None:
             return ActionResult.failure(f"Invalid direction: {direction}")
 
-        return self._execute_sequence([ord("t"), ord(item_letter), key])
+        return self._item_command(ord("t"), item_letter, direction_key=key)
 
     # ==================== Items ====================
 
@@ -762,8 +813,23 @@ class ActionExecutor:
             ActionResult
         """
         if item_letter:
-            # Pick up specific item from pile: comma opens menu, letter selects, enter confirms
-            return self._execute_sequence([ord(","), ord(item_letter), ord("\r")])
+            # Comma opens a menu only when the pile holds several items; with a single
+            # item it is picked up right away and the letter would start a new command
+            messages = []
+            pre_messages, _ = self._handle_all_prompts()
+            messages.extend(pre_messages)
+
+            step = self._execute_single(ord(","), handle_prompts=False)
+            messages.extend(step.messages)
+
+            if self._is_pickup_menu()[0]:
+                for char in (ord(item_letter), ord("\r")):
+                    step = self._execute_single(char, handle_prompts=False)
+                    messages.extend(step.messages)
+
+            post_messages, _ = self._handle_all_prompts()
+            messages.extend(post_messages)
+            return ActionResult(success=True, messages=messages)
 
         # Send comma to initiate pickup
         idx = self._get_action_idx(ord(","))
@@ -818,7 +884,7 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("d"), ord(item_letter)])
+        return self._item_command(ord("d"), item_letter)
 
     def eat(self, item_letter: Optional[str] = None) -> ActionResult:
         """
@@ -837,7 +903,8 @@ class ActionExecutor:
                     f"item_letter must be a single character, got '{item_letter}'. "
                     "Use nh.eat() with no arguments to eat from ground."
                 )
-            return self._execute_sequence([ord("e"), ord(item_letter)])
+            # Decline food lying here, otherwise it is eaten instead of the requested item
+            return self._item_command(ord("e"), item_letter, decline_ground_food=True)
         else:
             # Eat from ground or prompt
             return self._execute_single(ord("e"))
@@ -852,7 +919,7 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("q"), ord(item_letter)])
+        return self._item_command(ord("q"), item_letter)
 
     def read(self, item_letter: str) -> ActionResult:
         """
@@ -864,7 +931,7 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("r"), ord(item_letter)])
+        return self._item_command(ord("r"), item_letter)
 
     def zap(self, item_letter: str, direction: Direction) -> ActionResult:
         """
@@ -881,7 +948,7 @@ class ActionExecutor:
         if key is None:
             return ActionResult.failure(f"Invalid direction: {direction}")
 
-        return self._execute_sequence([ord("z"), ord(item_letter), key])
+        return self._item_command(ord("z"), item_letter, direction_key=key)
 
     def wear(self, item_letter: str) -> ActionResult:
         """
@@ -893,7 +960,7 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("W"), ord(item_letter)])
+        return self._item_command(ord("W"), item_letter)
 
     def wield(self, item_letter: str) -> ActionResult:
         """
@@ -905,7 +972,7 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("w"), ord(item_letter)])
+        return self._item_command(ord("w"), item_letter)
 
     def take_off(self, item_letter: str) -> ActionResult:
         """
@@ -917,7 +984,130 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("T"), ord(item_letter)])
+        # 'T' undresses the only worn item without asking, which could be a
+        # different one than requested, so check before sending anything
+        if self._worn_item(item_letter) is None:
+            return ActionResult.failure(f"Item '{item_letter}' is not being worn")
+        return self._item_command(ord("T"), item_letter)
+
+    def _is_item_selection_prompt(self) -> bool:
+        """Check for an item prompt, e.g. "What do you want to put on? [de or ?*]"."""
+        obs = self.env.last_observation
+        if obs is None:
+            return False
+        if not obs.in_yn_prompt:
+            return False
+        return "What do you want to" in obs.get_message()
+
+    def put_on(self, item_letter: str, hand: str = "right") -> ActionResult:
+        """
+        Put on jewelry or an accessory (ring, amulet, blindfold, lenses).
+
+        Rings ask which finger to use, so this answers that prompt instead of
+        letting the generic handler cancel it.
+
+        Args:
+            item_letter: Inventory letter of the accessory
+            hand: Which hand for rings, "right" (default) or "left". Ignored by
+                  amulets and other accessories, which don't ask.
+
+        Returns:
+            ActionResult
+        """
+        hand_key = hand.strip().lower()[:1]
+        if hand_key not in ("r", "l"):
+            return ActionResult.failure(f"Invalid hand: {hand!r} (expected 'right' or 'left')")
+
+        return self._item_command(ord("P"), item_letter, hand_key=hand_key)
+
+    def remove(self, item_letter: str) -> ActionResult:
+        """
+        Remove worn jewelry or an accessory (ring, amulet, blindfold, lenses).
+
+        Args:
+            item_letter: Inventory letter of the accessory to remove
+
+        Returns:
+            ActionResult
+        """
+        # 'R' removes the only worn accessory without asking, which could be a
+        # different one than requested, so check before sending anything
+        if self._worn_item(item_letter) is None:
+            return ActionResult.failure(f"Item '{item_letter}' is not being worn")
+        return self._item_command(ord("R"), item_letter)
+
+    def _worn_item(self, item_letter: str):
+        """Return the worn/wielded inventory item in `item_letter`, or None."""
+        from .queries import get_inventory
+
+        obs = self.env.last_observation
+        if obs is None:
+            return None
+        return next(
+            (i for i in get_inventory(obs) if i.slot == item_letter and i.equipped), None
+        )
+
+    def _item_command(
+        self,
+        command_key: int,
+        item_letter: Optional[str] = None,
+        direction_key: Optional[int] = None,
+        hand_key: Optional[str] = None,
+        decline_ground_food: bool = False,
+    ) -> ActionResult:
+        """
+        Run an inventory command, sending each follow-up key only when asked for.
+
+        NetHack only prompts for an item when there is a choice: with a single
+        candidate some commands act right away, and with none they refuse
+        outright. A letter sent regardless would then be read as the *next*
+        command (e.g. a leftover "z" starts a zap), so every follow-up key is
+        sent only while its prompt is actually showing.
+
+        Args:
+            command_key: The command character (e.g. ord("q") to quaff)
+            item_letter: Inventory letter, sent at the "What do you want to..." prompt
+            direction_key: Direction key, sent at the "In what direction?" prompt
+            hand_key: "r"/"l", sent at the ring-finger prompt
+            decline_ground_food: Answer "no" to "eat it?" so food on the floor is
+                                 skipped in favour of the requested inventory item
+
+        Returns:
+            ActionResult, unsuccessful if the game refused the command
+        """
+        messages = []
+        pre_messages, _ = self._handle_all_prompts()
+        messages.extend(pre_messages)
+
+        step = self._execute_single(command_key, handle_prompts=False)
+        messages.extend(step.messages)
+
+        if decline_ground_food:
+            # There may be several stacks on the tile, each asked about in turn
+            for _ in range(5):
+                if not self._is_ground_food_prompt():
+                    break
+                step = self._execute_single(ord("n"), handle_prompts=False)
+                messages.extend(step.messages)
+
+        if item_letter and self._is_item_selection_prompt():
+            step = self._execute_single(ord(item_letter), handle_prompts=False)
+            messages.extend(step.messages)
+
+        # Rings ask "Which ring-finger, Right or Left? [rl]"
+        if hand_key and self._is_ring_hand_prompt():
+            step = self._execute_single(ord(hand_key), handle_prompts=False)
+            messages.extend(step.messages)
+
+        if direction_key is not None and self._is_direction_prompt():
+            step = self._execute_single(direction_key, handle_prompts=False)
+            messages.extend(step.messages)
+
+        post_messages, _ = self._handle_all_prompts()
+        messages.extend(post_messages)
+
+        refused = any(msg.startswith(REFUSAL_PREFIXES) for msg in messages)
+        return ActionResult(success=not refused, messages=messages, turn_elapsed=not refused)
 
     def apply(self, item_letter: str) -> ActionResult:
         """
@@ -929,7 +1119,7 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
-        return self._execute_sequence([ord("a"), ord(item_letter)])
+        return self._item_command(ord("a"), item_letter)
 
     # ==================== Doors ====================
 
@@ -1044,13 +1234,41 @@ class ActionExecutor:
         Returns:
             ActionResult
         """
+        key = None
         if direction:
             key = self._direction_keys.get(direction)
             if key is None:
                 return ActionResult.failure(f"Invalid direction: {direction}")
-            return self._execute_sequence([ord("Z"), ord(spell_letter), key])
-        else:
-            return self._execute_sequence([ord("Z"), ord(spell_letter)])
+
+        messages = []
+        pre_messages, _ = self._handle_all_prompts()
+        messages.extend(pre_messages)
+
+        step = self._execute_single(ord("Z"), handle_prompts=False)
+        messages.extend(step.messages)
+
+        # With no spells known there is no menu, and the letter would be read as a command
+        unknown_spell = False
+        if self._is_spell_menu():
+            step = self._execute_single(ord(spell_letter), handle_prompts=False)
+            messages.extend(step.messages)
+            if self._is_spell_menu():
+                # The menu ignored the letter, so no such spell is known
+                unknown_spell = True
+                messages.append(f"You don't know a spell in slot '{spell_letter}'.")
+                esc_idx = self._get_action_idx(27)
+                if esc_idx is not None:
+                    self.env.step(esc_idx)
+
+        if key is not None and self._is_direction_prompt():
+            step = self._execute_single(key, handle_prompts=False)
+            messages.extend(step.messages)
+
+        post_messages, _ = self._handle_all_prompts()
+        messages.extend(post_messages)
+
+        refused = unknown_spell or any(msg.startswith(REFUSAL_PREFIXES) for msg in messages)
+        return ActionResult(success=not refused, messages=messages, turn_elapsed=not refused)
 
     def engrave(self, text: str = "Elbereth") -> ActionResult:
         """

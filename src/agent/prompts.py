@@ -600,6 +600,8 @@ nh.read('a')                 # Read scroll/spellbook
 nh.wield('a')                # Wield weapon
 nh.wear('a')                 # Wear armor
 nh.take_off('a')             # Remove armor
+nh.put_on('a')               # Put on ring/amulet/blindfold (rings: hand='right'|'left')
+nh.remove('a')               # Remove ring/amulet/blindfold
 nh.zap('a', Direction)       # Zap wand
 nh.apply('a')                # Use tool (pickaxe, key, horn)
 
@@ -739,7 +741,7 @@ Available API methods on `nh`:
 - State: get_stats(), get_position(), get_message(), get_visible_monsters(), get_adjacent_hostiles(), get_inventory(), turn, is_done
 - Movement: move(direction, count=1), go_up(), go_down()
 - Combat: attack(direction)
-- Items: pickup(), eat(slot), quaff(slot), wield(slot), wear(slot)
+- Items: pickup(), eat(slot), quaff(slot), wield(slot), wear(slot), put_on(slot), remove(slot)
 - Utility: wait(count=1), search(count=1), open_door(direction)
 - Navigation: move_to(target), travel_to(char), autoexplore()
 Note: count parameter uses NetHack's repeat prefix - auto-stops on monster/danger

@@ -213,6 +213,8 @@ nh.read('a')                  # Read scroll/spellbook
 nh.wield('a')                 # Wield weapon
 nh.wear('a')                  # Wear armor
 nh.take_off('a')              # Remove worn armor
+nh.put_on('a')                # Put on ring/amulet/blindfold (rings: hand='right'|'left')
+nh.remove('a')                # Remove ring/amulet/blindfold
 nh.zap('a', Direction.N)      # Zap wand
 nh.apply('a')                 # Use tool/key/horn
 ```

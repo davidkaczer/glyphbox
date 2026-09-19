@@ -220,3 +220,120 @@ class TestMultiStepActions:
         result = executor.throw("a", Direction.N)
 
         assert isinstance(result, ActionResult)
+
+
+@pytest.fixture
+def wizard_api():
+    """A wizard starts with rings, potions, scrolls and a wand to exercise item commands."""
+    from src.api.nethack_api import NetHackAPI
+
+    api = NetHackAPI(character="wiz-elf-cha-mal", max_episode_steps=1000)
+    api.reset()
+    yield api
+    api.close()
+
+
+class TestJewelry:
+    """Tests for putting on and removing jewelry/accessories."""
+
+    @staticmethod
+    def _rings(api):
+        return [i for i in api.get_inventory() if i.object_class.value == "ring"]
+
+    @staticmethod
+    def _item(api, slot):
+        return next((i for i in api.get_inventory() if i.slot == slot), None)
+
+    def test_put_on_ring_each_hand_then_remove(self, wizard_api):
+        """Rings go on the requested hand and come back off."""
+        first, second = self._rings(wizard_api)[:2]
+
+        assert wizard_api.put_on(first.slot).success
+        assert wizard_api.put_on(second.slot, hand="left").success
+
+        assert "on right hand" in self._item(wizard_api, first.slot).name
+        assert "on left hand" in self._item(wizard_api, second.slot).name
+        assert self._item(wizard_api, first.slot).equipped
+
+        assert wizard_api.remove(first.slot).success
+        assert wizard_api.remove(second.slot).success
+        assert not self._item(wizard_api, first.slot).equipped
+        assert not self._item(wizard_api, second.slot).equipped
+
+    def test_invalid_hand_rejected(self, wizard_api):
+        """An unusable hand fails before any key is sent."""
+        ring = self._rings(wizard_api)[0]
+
+        result = wizard_api.put_on(ring.slot, hand="sideways")
+
+        assert not result.success
+        assert not self._item(wizard_api, ring.slot).equipped
+
+    def test_remove_item_not_worn_fails(self, wizard_api):
+        """Removing something that isn't worn is reported as a failure."""
+        ring = self._rings(wizard_api)[0]
+
+        result = wizard_api.remove(ring.slot)
+
+        assert not result.success
+
+    def test_put_on_does_not_leak_keystroke(self, wizard_api):
+        """With nothing left to put on, the slot letter must not start another command."""
+        for ring in self._rings(wizard_api)[:2]:
+            wizard_api.put_on(ring.slot)
+        # 'z' would be read as the zap command if it leaked past the refusal
+        result = wizard_api.put_on("z")
+
+        assert not result.success
+        assert not any("zap" in msg for msg in result.messages)
+
+
+class TestItemCommandRefusals:
+    """A refused item command must not leave its slot letter to be read as the next command."""
+
+    @staticmethod
+    def _slot(api, object_class):
+        return next(i.slot for i in api.get_inventory() if i.object_class.value == object_class)
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            lambda api: api.quaff("z"),
+            lambda api: api.read("z"),
+            lambda api: api.wear("z"),
+            lambda api: api.wield("z"),
+            lambda api: api.apply("z"),
+            lambda api: api.drop("z"),
+            lambda api: api.eat("z"),
+            lambda api: api.take_off("z"),
+            lambda api: api.zap("z", Direction.E),
+            lambda api: api.throw("z", Direction.E),
+            lambda api: api.cast_spell("z", Direction.E),
+        ],
+    )
+    def test_refusal_is_reported_and_leaves_no_pending_prompt(self, wizard_api, command):
+        """The command fails, the player stays put, and the game is ready for the next command."""
+        before = wizard_api.position
+
+        result = command(wizard_api)
+
+        assert not result.success
+        assert wizard_api.position == before
+        assert not wizard_api._actions.env.last_observation.in_any_prompt
+
+    def test_zap_still_works_with_a_valid_wand(self, wizard_api):
+        """The gating must not break the normal path: a real wand loses a charge."""
+        wand = self._slot(wizard_api, "wand")
+        charges = lambda: next(i.name for i in wizard_api.get_inventory() if i.slot == wand)
+        before = charges()
+
+        result = wizard_api.zap(wand, Direction.E)
+
+        assert result.success
+        assert charges() != before
+
+    def test_cast_known_spell_succeeds(self, wizard_api):
+        """Wizards start knowing force bolt in slot a."""
+        result = wizard_api.cast_spell("a", Direction.E)
+
+        assert result.success

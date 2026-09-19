@@ -1068,6 +1068,22 @@ class NetHackAPI:
         self._record_messages(result.messages)
         return result
 
+    def put_on(self, item_letter: str, hand: str = "right") -> ActionResult:
+        """Put on jewelry/accessory (ring, amulet, blindfold). hand: "right" or "left" for rings."""
+        if not self._actions:
+            return ActionResult.failure("Environment not initialized")
+        result = self._actions.put_on(item_letter, hand)
+        self._record_messages(result.messages)
+        return result
+
+    def remove(self, item_letter: str) -> ActionResult:
+        """Remove worn jewelry/accessory (ring, amulet, blindfold)."""
+        if not self._actions:
+            return ActionResult.failure("Environment not initialized")
+        result = self._actions.remove(item_letter)
+        self._record_messages(result.messages)
+        return result
+
     def open_door(self, direction: Direction) -> ActionResult:
         """Open a door."""
         if not self._actions:
