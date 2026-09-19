@@ -355,7 +355,7 @@ else:
 
 **Items**: `pickup()`, `drop(slot)`, `eat(slot)`, `quaff(slot)`, `read(slot)`, `wield(slot)`, `wear(slot)`, `take_off(slot)`, `put_on(slot, hand)`, `remove(slot)`, `zap(slot, direction)`, `apply(slot)`
 
-**Interactions**: `open_door(direction)`, `close_door(direction)`, `cast_spell(slot, direction)`, `pay()`, `pray()`, `engrave(text)`, `look()`
+**Interactions**: `open_door(direction)`, `close_door(direction)`, `cast_spell(slot, direction)`, `pay()`, `pray()`, `engrave(text, item_letter)`, `look()`
 
 **Utility**: `wait(count)`, `search(count)`, `add_reminder(turns, msg)`, `add_note(turns, msg)`, `remove_note(id)`, `confirm()`, `deny()`, `escape()`, `space()`
 

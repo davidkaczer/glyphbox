@@ -1126,11 +1126,11 @@ class NetHackAPI:
         self._record_messages(result.messages)
         return result
 
-    def engrave(self, text: str = "Elbereth") -> ActionResult:
-        """Engrave text on the floor."""
+    def engrave(self, text: str = "Elbereth", item_letter: Optional[str] = None) -> ActionResult:
+        """Engrave text on the floor. item_letter: wand/athame to write with (default: finger in dust)."""
         if not self._actions:
             return ActionResult.failure("Environment not initialized")
-        result = self._actions.engrave(text)
+        result = self._actions.engrave(text, item_letter)
         self._record_messages(result.messages)
         return result
 

@@ -229,7 +229,8 @@ nh.close_door(Direction.W)    # Close door west
 ```python
 nh.pray()                     # Pray to deity (has cooldown)
 nh.pay()                      # Pay shopkeeper
-nh.engrave("Elbereth")        # Write on floor
+nh.engrave("Elbereth")        # Write on floor with a finger (in dust)
+nh.engrave("Elbereth", 'c')   # Write with a wand/athame (lasting engraving)
 nh.cast_spell('a', Direction.N)  # Cast spell
 nh.look()                     # Look at current square
 nh.send_keys("keys")          # Raw keystrokes (escape hatch)

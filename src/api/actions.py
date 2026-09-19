@@ -1270,36 +1270,58 @@ class ActionExecutor:
         refused = unknown_spell or any(msg.startswith(REFUSAL_PREFIXES) for msg in messages)
         return ActionResult(success=not refused, messages=messages, turn_elapsed=not refused)
 
-    def engrave(self, text: str = "Elbereth") -> ActionResult:
+    def engrave(self, text: str = "Elbereth", item_letter: Optional[str] = None) -> ActionResult:
         """
         Engrave on the floor.
 
         Handles both new engravings and adding to existing ones.
-        Uses finger to write in dust (safe, no item consumption).
 
         Args:
             text: Text to engrave (default: "Elbereth")
+            item_letter: Inventory letter of what to write with — a wand burns or
+                         digs a lasting engraving, an athame carves one. The default
+                         (None) writes in the dust with a finger, which consumes
+                         nothing but smudges when walked on.
 
         Returns:
-            ActionResult
+            ActionResult, unsuccessful if the game never asked for the text
+            (e.g. engraving is impossible here, or the item can't be used)
         """
+        writer = item_letter if item_letter is not None else "-"
+        if len(writer) != 1:
+            return ActionResult.failure(
+                f"item_letter must be a single character, got '{item_letter}'"
+            )
+
         messages: list[str] = []
 
         # Clear any pre-existing prompts
         pre_msgs, _ = self._handle_all_prompts()
         messages.extend(pre_msgs)
 
-        # Send E to start engraving, then - to select finger.
-        # All sent with handle_prompts=False because the engrave dialog
-        # involves a chain of prompts (menu, yn, getlin) that we must
+        # Send E to start engraving. All sent with handle_prompts=False because the
+        # engrave dialog involves a chain of prompts (menu, yn, getlin) that we must
         # navigate manually — _handle_all_prompts would ESC the getlin.
-        for char in [ord("E"), ord("-")]:
-            result = self._execute_single(char, handle_prompts=False)
-            if result.messages:
-                messages.extend(result.messages)
-            if not result.success:
-                result.messages = messages
-                return result
+        result = self._execute_single(ord("E"), handle_prompts=False)
+        messages.extend(result.messages)
+
+        # Without the "What do you want to write with?" prompt engraving is
+        # impossible here (levitating, on stairs, ...) and the keys that follow
+        # would be read as commands
+        if not self._is_item_selection_prompt():
+            cleanup_msgs, _ = self._handle_all_prompts()
+            messages.extend(cleanup_msgs)
+            return ActionResult(success=False, messages=messages, turn_elapsed=False)
+
+        # Select what to write with ("-" is a fingertip)
+        result = self._execute_single(ord(writer), handle_prompts=False)
+        messages.extend(result.messages)
+
+        # Still being asked means the letter was rejected (no such item)
+        if self._is_item_selection_prompt():
+            cleanup_msgs, _ = self._handle_all_prompts()
+            messages.extend(cleanup_msgs)
+            return ActionResult(success=False, messages=messages, turn_elapsed=False)
 
         # Handle intermediate prompts before text input.
         # If there's an existing engraving, NetHack asks "Do you want to add
@@ -1316,7 +1338,15 @@ class ActionExecutor:
             else:
                 break
 
-        # Send text characters + Enter. Game should be in getlin mode now.
+        # The text is only safe to type once the game is asking for it; otherwise
+        # the item had some other effect (a wand of teleportation erasing the
+        # engraving, say) and the characters would be read as commands
+        if not self._is_getlin_prompt():
+            cleanup_msgs, _ = self._handle_all_prompts()
+            messages.extend(cleanup_msgs)
+            return ActionResult(success=False, messages=messages, turn_elapsed=True)
+
+        # Send text characters + Enter. Game is in getlin mode now.
         for c in text:
             result = self._execute_single(ord(c), handle_prompts=False)
             if result.messages:

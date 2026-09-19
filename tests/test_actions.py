@@ -337,3 +337,42 @@ class TestItemCommandRefusals:
         result = wizard_api.cast_spell("a", Direction.E)
 
         assert result.success
+
+
+class TestEngrave:
+    """Tests for engraving with a fingertip or an item."""
+
+    def test_engrave_with_finger(self, wizard_api):
+        """The default writes in the dust and leaves something to read."""
+        result = wizard_api.engrave("Elbereth")
+
+        assert result.success
+        assert any("dust" in msg for msg in result.messages)
+        assert any("written here" in msg for msg in wizard_api.look().messages)
+
+    def test_engrave_with_item(self, wizard_api):
+        """A wand can be used instead of a fingertip."""
+        wand = next(i.slot for i in wizard_api.get_inventory() if i.object_class.value == "wand")
+
+        result = wizard_api.engrave("Elbereth", item_letter=wand)
+
+        assert result.success
+        assert any("written here" in msg for msg in wizard_api.look().messages)
+
+    def test_engrave_with_unavailable_item_fails(self, wizard_api):
+        """A slot holding nothing is refused without the text leaking as commands."""
+        before = wizard_api.position
+
+        result = wizard_api.engrave("Elbereth", item_letter="z")
+
+        assert not result.success
+        assert wizard_api.position == before
+        assert not wizard_api._actions.env.last_observation.in_any_prompt
+        assert not any("written here" in msg for msg in wizard_api.look().messages)
+
+    def test_engrave_rejects_multi_character_slot(self, wizard_api):
+        """An invalid argument fails before any key is sent."""
+        result = wizard_api.engrave("Elbereth", item_letter="ab")
+
+        assert not result.success
+        assert result.messages == []

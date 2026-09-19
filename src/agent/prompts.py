@@ -613,7 +613,8 @@ nh.close_door(Direction)     # Close door
 nh.cast_spell('a', Direction) # Cast memorized spell
 nh.pay()                     # Pay shopkeeper for picked-up items
 nh.pray()                    # Pray to deity (has cooldown)
-nh.engrave("Elbereth")       # Write on floor
+nh.engrave("Elbereth")       # Write on floor (finger in dust; smudges when walked on)
+nh.engrave("Elbereth", 'c')  # Write with a wand/athame - lasting, wand may be used up
 nh.look()                    # Look at current square
 
 **Utility (count uses NetHack's repeat prefix - auto-stops on monster/danger):**
