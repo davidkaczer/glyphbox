@@ -146,6 +146,30 @@ class TestGetInventory:
         assert inventory[0].slot == "a"
         assert inventory[0].is_food
 
+    def test_buc_and_equipped(self):
+        """BUC status matches whole words ("uncursed" isn't "cursed"); in-use tags set equipped."""
+        from src.api.models import BUCStatus
+
+        obs = make_mock_observation()
+        entries = [
+            b"uncursed +3 small shield (being worn)",
+            b"cursed ring of teleportation (on left hand)",
+            b"blessed +1 quarterstaff (weapon in hands)",
+            b"+0 dagger (alternate weapon; not wielded)",
+        ]
+        for i, item_str in enumerate(entries):
+            obs.inv_letters[i] = ord("a") + i
+            obs.inv_glyphs[i] = 1906 + 50
+            obs.inv_oclasses[i] = 2
+            obs.inv_strs[i, :len(item_str)] = list(item_str)
+
+        inventory = get_inventory(obs)
+
+        assert [i.buc_status for i in inventory] == [
+            BUCStatus.UNCURSED, BUCStatus.CURSED, BUCStatus.BLESSED, BUCStatus.UNKNOWN,
+        ]
+        assert [i.equipped for i in inventory] == [True, True, True, False]
+
 
 class TestFindStairs:
     """Tests for find_stairs function."""

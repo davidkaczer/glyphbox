@@ -3,12 +3,18 @@
 
 # Agent settings
 agent:
-  # LLM provider: "openrouter" or "anthropic"
-  provider: "openrouter"
-  # LLM model to use for strategic decisions (OpenRouter format)
-  model: "google/gemini-3-flash-preview"
-  # OpenRouter base URL
-  base_url: "https://openrouter.ai/api/v1"
+  # LLM provider: "openai", "openrouter" or "anthropic"
+  # API key is read from OPENAI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY
+  provider: "openai"
+  # LLM model to use for strategic decisions (OpenAI model ID, e.g. "gpt-5.2")
+  model: "gpt-5.6-terra"
+  # API base URL (leave empty to use the provider's standard endpoint;
+  # set this to point at any other OpenAI-compatible server)
+  base_url: ""
+  # OpenAI provider only: which API to call.
+  # "responses" (default): Responses API, needed by newer models for tools + reasoning
+  # "chat": Chat Completions, for OpenAI-compatible servers without /v1/responses
+  openai_api: "responses"
   # Temperature for LLM sampling (0.0 = deterministic, 1.0 = creative)
   temperature: 0.1
   # Reasoning/thinking effort for models that support extended thinking
@@ -58,7 +64,7 @@ environment:
   # Render mode: null for no rendering, "human" for visual, "ansi" for terminal
   render_mode: null
   # Character selection: "random" or specific like "val-hum-law-fem"
-  character: "random"
+  character: "val-dwa-law-fem"
 
 # Skill system settings
 skills:

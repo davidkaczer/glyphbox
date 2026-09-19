@@ -59,6 +59,13 @@ class ReasoningPanel(VerticalScroll):
         yield Static("", id="code-label")
         yield Static("", id="code-content")
 
+    def show_error(self, message: str) -> None:
+        """Show an agent error (e.g. LLM API failure) in place of the reasoning."""
+        content = Text()
+        content.append("Agent stopped with error:\n\n", style="red bold")
+        content.append(message, style="red")
+        self.query_one("#reasoning-content", Static).update(content)
+
     def on_decision_made(self, event: DecisionMade) -> None:
         """Update with new decision's reasoning."""
         decision = event.decision

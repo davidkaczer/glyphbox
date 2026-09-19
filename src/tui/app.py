@@ -11,14 +11,15 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Header, Footer
 
-from .events import AgentStatusChanged, DecisionMade, GameStateUpdated, SkillExecuted
+from .events import AgentStatusChanged, DecisionMade, GameMessages, GameStateUpdated, SkillExecuted
 from .logging import setup_run_logging, teardown_run_logging, get_log_file
 from .runner import TUIAgentRunner
 from .widgets import (
     ControlsWidget,
     GameScreenWidget,
+    InventoryPanel,
+    MessageLog,
     ReasoningPanel,
-    StatsBar,
 )
 
 if TYPE_CHECKING:
@@ -33,13 +34,14 @@ class NetHackTUI(App):
     Main TUI application for watching the NetHack agent.
 
     Layout:
-    - Left panel (60%): Decision log + Reasoning panel
-    - Right panel (40%): Stats bar + Game screen
+    - Left panel: Reasoning panel + Inventory (toggle with I)
+    - Right panel (NetHack terminal width): Game screen + Message log
     - Bottom: Control buttons
 
     Keyboard shortcuts:
     - S: Start agent
     - Space: Pause/Resume
+    - I: Show/hide inventory
     - Q: Quit
     """
 
@@ -53,32 +55,41 @@ class NetHackTUI(App):
     }
 
     #left-panel {
-        width: 50%;
+        width: 1fr;
         height: 100%;
     }
 
+    /* Exactly as wide as the game screen; the reasoning panel takes the rest */
     #right-panel {
-        width: 50%;
+        width: 82;
         height: 100%;
     }
 
     #reasoning-panel {
-        height: 100%;
-    }
-
-    #stats-bar {
-        height: 5;
-    }
-
-    #game-screen {
         height: 1fr;
-        min-height: 26;
+    }
+
+    #inventory-panel {
+        height: auto;
+        max-height: 50%;
+    }
+
+    /* NetHack terminal size (80x24) plus a 1-cell border on each side */
+    #game-screen {
+        width: 82;
+        height: 26;
+    }
+
+    #message-log {
+        height: 1fr;
+        min-height: 5;
     }
     """
 
     BINDINGS = [
         Binding("s", "start", "Start", show=True),
         Binding("space", "toggle_pause", "Pause/Resume", show=True),
+        Binding("i", "toggle_inventory", "Inventory", show=True),
         Binding("q", "quit", "Quit", show=True),
     ]
 
@@ -108,11 +119,12 @@ class NetHackTUI(App):
             Horizontal(
                 Vertical(
                     ReasoningPanel(id="reasoning-panel"),
+                    InventoryPanel(id="inventory-panel"),
                     id="left-panel",
                 ),
                 Vertical(
-                    StatsBar(id="stats-bar"),
                     GameScreenWidget(id="game-screen"),
+                    MessageLog(id="message-log"),
                     id="right-panel",
                 ),
                 id="main-container",
@@ -161,19 +173,30 @@ class NetHackTUI(App):
     def on_game_state_updated(self, event: GameStateUpdated) -> None:
         """Forward game state event to widgets."""
         try:
-            stats_bar = self.query_one("#stats-bar", StatsBar)
-            stats_bar.on_game_state_updated(event)
-
             game_screen = self.query_one("#game-screen", GameScreenWidget)
             game_screen.on_game_state_updated(event)
+
+            inventory = self.query_one("#inventory-panel", InventoryPanel)
+            inventory.on_game_state_updated(event)
         except Exception as e:
             logger.error(f"Error handling GameStateUpdated: {e}")
 
+    def on_game_messages(self, event: GameMessages) -> None:
+        """Forward new in-game messages to the message log."""
+        try:
+            message_log = self.query_one("#message-log", MessageLog)
+            message_log.on_game_messages(event)
+        except Exception as e:
+            logger.error(f"Error handling GameMessages: {e}")
+
     def on_agent_status_changed(self, event: AgentStatusChanged) -> None:
-        """Forward status change event to controls."""
+        """Forward status change event to controls (and errors to the reasoning panel)."""
         try:
             controls = self.query_one("#controls", ControlsWidget)
             controls.on_agent_status_changed(event)
+            if event.status == "error" and event.error_message:
+                reasoning_panel = self.query_one("#reasoning-panel", ReasoningPanel)
+                reasoning_panel.show_error(event.error_message)
         except Exception as e:
             logger.error(f"Error handling AgentStatusChanged: {e}")
 
@@ -191,6 +214,11 @@ class NetHackTUI(App):
                 self.runner.resume()
             else:
                 self.runner.pause()
+
+    def action_toggle_inventory(self) -> None:
+        """Show or hide the inventory panel."""
+        panel = self.query_one("#inventory-panel", InventoryPanel)
+        panel.display = not panel.display
 
     def action_stop(self) -> None:
         """Stop the agent."""

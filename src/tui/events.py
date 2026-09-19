@@ -68,6 +68,7 @@ class GameStateUpdated(Message):
     score: int
     message: str
     hunger: str
+    inventory: Optional[list]
 
     def __init__(
         self,
@@ -81,6 +82,7 @@ class GameStateUpdated(Message):
         score: int,
         message: str,
         hunger: str,
+        inventory: Optional[list] = None,
     ) -> None:
         super().__init__()
         self.screen = screen
@@ -93,6 +95,7 @@ class GameStateUpdated(Message):
         self.score = score
         self.message = message
         self.hunger = hunger
+        self.inventory = inventory  # list[Item], or None if not captured
 
 
 @dataclass
@@ -110,3 +113,16 @@ class AgentStatusChanged(Message):
         super().__init__()
         self.status = status
         self.error_message = error_message
+
+
+@dataclass
+class GameMessages(Message):
+    """Emitted with in-game messages recorded since the last GameMessages event."""
+
+    messages: list[str]
+    turn: int
+
+    def __init__(self, messages: list[str], turn: int) -> None:
+        super().__init__()
+        self.messages = messages
+        self.turn = turn

@@ -119,7 +119,7 @@ class LLMLogger:
         self,
         model: str,
         messages: list[dict],
-        temperature: float,
+        temperature: Optional[float],
         max_tokens: Optional[int] = None,
     ) -> None:
         """Log an LLM request."""

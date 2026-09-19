@@ -41,6 +41,7 @@ class AgentState:
     skills_executed: int = 0
     skills_created: int = 0
     consecutive_errors: int = 0
+    last_error: Optional[str] = None
     last_decision: Optional[AgentDecision] = None
     last_skill_result: Optional[dict] = None
     running: bool = False
@@ -294,6 +295,7 @@ class NetHackAgent:
         except Exception as e:
             logger.exception(f"Step error: {e}")
             self.state.consecutive_errors += 1
+            self.state.last_error = str(e)
             if self._result:
                 self._result.errors.append(str(e))
             return None
@@ -848,6 +850,7 @@ async def create_agent(
         model=llm_config.get("model", AgentConfig.model),
         base_url=llm_config.get("base_url", AgentConfig.base_url),
         temperature=llm_config.get("temperature", AgentConfig.temperature),
+        reasoning=llm_config.get("reasoning", AgentConfig.reasoning),
     )
 
     # Create skill library

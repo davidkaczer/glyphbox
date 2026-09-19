@@ -32,9 +32,14 @@ class AgentConfig:
     """Agent configuration (LLM + runtime settings)."""
 
     # LLM settings
-    provider: str = "openrouter"
-    model: str = "anthropic/claude-opus-4.5"
-    base_url: str = "https://openrouter.ai/api/v1"
+    # "openai", "openrouter" or "anthropic"
+    provider: str = "openai"
+    model: str = "gpt-5.2"
+    # Empty = use the provider's standard endpoint
+    base_url: str = ""
+    # OpenAI provider only: "responses" (Responses API) or "chat" (Chat Completions,
+    # for OpenAI-compatible servers without /v1/responses)
+    openai_api: str = "responses"
     temperature: float = 0.2
     # Reasoning/thinking effort level (for models that support extended thinking)
     # Options: "none", "minimal", "low", "medium", "high", "xhigh"
@@ -296,7 +301,8 @@ def load_config(config_path: Optional[str] = None) -> Config:
     if os.environ.get("NETHACK_WORKER_QUEUE"):
         config.worker.queue = os.environ["NETHACK_WORKER_QUEUE"]
 
-    # Note: API key should be set via OPENROUTER_API_KEY env var
+    # Note: API key should be set via the provider's env var
+    # (OPENAI_API_KEY, OPENROUTER_API_KEY or ANTHROPIC_API_KEY)
     # (read by the LLM client, not stored in config for security)
 
     return config

@@ -495,6 +495,32 @@ class ActionExecutor:
         else:
             result = self._execute_single(key, decline_attacks=True)
 
+        # NetHack ends a counted move after each boulder push, so keep pushing
+        # with the remaining count while a boulder is directly ahead (stopping
+        # if a hostile comes adjacent, as the counted move itself would)
+        if prefix and pos_before:
+            from .queries import get_adjacent_hostiles
+
+            remaining = count
+            step_start = pos_before
+            messages = list(result.messages)
+            while True:
+                obs = self.env.last_observation
+                pos = (obs.player_x, obs.player_y)
+                moved = max(abs(pos[0] - step_start[0]), abs(pos[1] - step_start[1]))
+                remaining -= moved
+                if moved == 0 or remaining <= 0 or not self._boulder_ahead(direction):
+                    break
+                if get_adjacent_hostiles(obs):
+                    break
+                step_start = pos
+                prefix = self._count_prefix(remaining)
+                step = self._execute_sequence(prefix + [key], decline_attacks=True)
+                messages.extend(step.messages)
+                if not step.success:
+                    break
+            result.messages = messages
+
         # Check if position actually changed
         obs_after = self.env.last_observation
         if obs_after and pos_before:
@@ -505,6 +531,18 @@ class ActionExecutor:
                 result.turn_elapsed = False
 
         return result
+
+    def _boulder_ahead(self, direction: Direction) -> bool:
+        """True if the tile next to the player in `direction` shows a boulder."""
+        from .glyphs import is_boulder_glyph
+
+        obs = self.env.last_observation
+        if obs is None:
+            return False
+        ahead = Position(obs.player_x, obs.player_y).move(direction)
+        if not (0 <= ahead.x < 79 and 0 <= ahead.y < 21):
+            return False
+        return is_boulder_glyph(int(obs.glyphs[ahead.y, ahead.x]))
 
     def run(self, direction: Direction) -> ActionResult:
         """

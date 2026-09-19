@@ -271,7 +271,8 @@ def parse_glyph(glyph: int, char: Optional[str] = None, description: Optional[st
             char=char,
             name=name,
             monster_id=mon_id,
-            is_walkable=False,
+            # Moving into a pet swaps places with it, so it doesn't block the path
+            is_walkable=True,
             is_tame=True,
         )
 

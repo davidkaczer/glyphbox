@@ -77,7 +77,7 @@ NLE (NetHack Learning Environment)           Web API (src/web/)
 
 - **`src/cli.py`**: Entry point. Commands: `watch` (TUI mode), `serve` (web server), `verify`
 - **`src/agent/agent.py`**: `NetHackAgent` class - main orchestration loop. Calls `step()` repeatedly which gets LLM decision and executes it. Manages conversation history with context compression
-- **`src/agent/llm_client.py`**: `LLMClient` using OpenAI-compatible API. Supports OpenRouter and direct Anthropic providers. Defines tools and handles extended thinking/reasoning
+- **`src/agent/llm_client.py`**: `LLMClient`. Supports OpenAI (default, via the Responses API), OpenRouter and direct Anthropic providers (via Chat Completions). Defines tools and handles extended thinking/reasoning
 - **`src/agent/prompts.py`**: `PromptManager` - builds system prompts, decision prompts, and formats last_result feedback. Handles deduplication of repeated game messages
 - **`src/agent/parser.py`**: Parses LLM tool call responses, extracts JSON from markdown code blocks
 - **`src/sandbox/manager.py`**: `SkillSandbox.execute_code()` runs agent-generated Python in restricted namespace with `nh` (NetHackAPI) available. `APICallTracker` wraps the API to record all action calls
@@ -179,7 +179,8 @@ Code validation in `src/sandbox/validation.py`:
 
 The LLM client supports extended thinking via the `reasoning` config parameter:
 - Effort levels: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`
-- Sent as `extra_body={"reasoning": {"effort": value}}` to OpenRouter
+- OpenAI provider uses the Responses API (`reasoning={"effort": value, "summary": "auto"}`; summaries become `reasoning_text`). Newer models reject tools + reasoning on Chat Completions. Temperature is omitted when reasoning is on; a rejected temperature or reasoning summary is dropped and retried automatically
+- Other providers use Chat Completions with `extra_body={"reasoning": {"effort": value}}` (OpenRouter)
 - `reasoning_text` and `reasoning_details` extracted from responses
 - Reasoning is preserved across turns in conversation history for chain-of-thought continuity
 
@@ -271,8 +272,10 @@ Three-layer memory architecture for episode tracking:
 `config/default.yaml` - key settings:
 
 **Agent**:
-- `agent.provider`: `"openrouter"` or `"anthropic"`
-- `agent.model`: Model identifier (default: `"anthropic/claude-opus-4.5"`, config currently set to `"google/gemini-3-flash-preview"`)
+- `agent.provider`: `"openai"` (default), `"openrouter"` or `"anthropic"`
+- `agent.model`: Model identifier in the provider's format (default: `"gpt-5.2"`)
+- `agent.base_url`: API endpoint; empty uses the provider's standard URL
+- `agent.openai_api`: OpenAI provider only - `"responses"` (default) or `"chat"` (Chat Completions)
 - `agent.temperature`: LLM sampling temperature (default: 0.1)
 - `agent.reasoning`: Extended thinking effort - `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
 - `agent.skills_enabled`: `false` (core tools only) or `true` (adds write_skill/invoke_skill)
@@ -293,7 +296,8 @@ Three-layer memory architecture for episode tracking:
 - `environment.character`: `"random"` or specific like `"val-hum-law-fem"`
 
 **Environment variables**:
-- `OPENROUTER_KEY` or `OPENROUTER_API_KEY`: Required for OpenRouter provider
+- `OPENAI_API_KEY`: Required for OpenAI provider (default)
+- `OPENROUTER_KEY` or `OPENROUTER_API_KEY`: Required for OpenRouter provider (and web multi-user runs, which always use OpenRouter OAuth keys)
 - `ANTHROPIC_API_KEY`: Required for Anthropic provider
 - `NETHACK_AGENT_MODEL`: Override model
 - `NETHACK_AGENT_PROVIDER`: Override provider

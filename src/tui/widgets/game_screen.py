@@ -20,6 +20,9 @@ class GameScreenWidget(Static):
         padding: 0;
         border: solid $secondary;
         overflow: hidden;
+        /* Clip rather than wrap if the terminal is too narrow, so rows stay aligned */
+        text-wrap: nowrap;
+        text-overflow: clip;
     }
     """
 

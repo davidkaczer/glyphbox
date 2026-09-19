@@ -389,13 +389,19 @@ def get_inventory(obs: Observation) -> list[Item]:
         elif item_str.startswith("a ") or item_str.startswith("an "):
             name = item_str.split(" ", 1)[1] if " " in item_str else item_str
 
-        # Check for BUC status
-        if "blessed" in name.lower():
-            buc = BUCStatus.BLESSED
-        elif "cursed" in name.lower():
-            buc = BUCStatus.CURSED
-        elif "uncursed" in name.lower():
+        # Check for BUC status (whole words, since "cursed" is inside "uncursed")
+        lower = name.lower()
+        if re.search(r"\buncursed\b", lower):
             buc = BUCStatus.UNCURSED
+        elif re.search(r"\bblessed\b", lower):
+            buc = BUCStatus.BLESSED
+        elif re.search(r"\bcursed\b", lower):
+            buc = BUCStatus.CURSED
+
+        # NetHack tags items in use, e.g. "(weapon in hand)", "(being worn)", "(on left hand)"
+        equipped = bool(
+            re.search(r"\((weapon in hands?|wielded|being worn|on (left|right) hand)", lower)
+        )
 
         # Check if identified (has +/- enchantment visible usually means identified)
         if re.search(r"[+-]\d+", name):
@@ -410,6 +416,7 @@ def get_inventory(obs: Observation) -> list[Item]:
                 buc_status=buc,
                 identified=identified,
                 object_class=ObjectClass.from_oclass(oclass),
+                equipped=equipped,
             )
         )
 

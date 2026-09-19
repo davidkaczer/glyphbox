@@ -36,7 +36,10 @@ uv sync
 Set an API key for your provider:
 
 ```bash
-# OpenRouter (default provider)
+# OpenAI (default provider)
+export OPENAI_API_KEY="your-key"
+
+# Or OpenRouter (set agent.provider: "openrouter" in config/default.yaml)
 export OPENROUTER_API_KEY="your-key"
 ```
 
@@ -321,9 +324,10 @@ All settings live in `config/default.yaml`. Every setting can also be overridden
 
 | Setting | Default | Description |
 |---|---|---|
-| `agent.provider` | `"openrouter"` | LLM provider: `"openrouter"` or `"anthropic"` |
-| `agent.model` | `"openai/gpt-5.2"` | Model identifier (OpenRouter or Anthropic format) |
-| `agent.base_url` | `"https://openrouter.ai/api/v1"` | API endpoint |
+| `agent.provider` | `"openai"` | LLM provider: `"openai"`, `"openrouter"` or `"anthropic"` |
+| `agent.model` | `"gpt-5.2"` | Model identifier in the provider's format (e.g. `gpt-5.2` for OpenAI, `openai/gpt-5.2` for OpenRouter) |
+| `agent.base_url` | `""` | API endpoint; empty uses the provider's standard URL. Set it to use any OpenAI-compatible server |
+| `agent.openai_api` | `"responses"` | OpenAI provider only: `"responses"` (Responses API) or `"chat"` (Chat Completions, for compatible servers without `/v1/responses`) |
 | `agent.temperature` | `0.1` | Sampling temperature (0.0 = deterministic, 1.0 = creative) |
 | `agent.reasoning` | `"high"` | Extended thinking effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` |
 | `agent.max_turns` | `100000` | Maximum turns per episode |
@@ -383,6 +387,7 @@ When `local_map_mode` is enabled, the LLM also gets a `view_full_map` tool to re
 
 | Variable | Description |
 |---|---|
+| `OPENAI_API_KEY` | API key for OpenAI (default provider) |
 | `OPENROUTER_API_KEY` (or `OPENROUTER_KEY`) | API key for OpenRouter |
 | `ANTHROPIC_API_KEY` | API key for direct Anthropic access |
 | `NETHACK_AGENT_MODEL` | Override model |
@@ -398,7 +403,7 @@ src/
 ├── config.py                 # Configuration loading
 ├── agent/
 │   ├── agent.py              # Main orchestration loop
-│   ├── llm_client.py         # LLM API client (OpenRouter/Anthropic)
+│   ├── llm_client.py         # LLM API client (OpenAI/OpenRouter/Anthropic)
 │   ├── parser.py             # LLM response parsing
 │   └── prompts.py            # System and decision prompt templates
 ├── api/

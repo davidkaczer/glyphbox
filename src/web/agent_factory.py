@@ -8,7 +8,7 @@ src/tui/runner.py but parameterized for multi-user runs.
 import logging
 
 from src.agent import NetHackAgent
-from src.agent.llm_client import LLMClient
+from src.agent.llm_client import PROVIDER_BASE_URLS, LLMClient
 from src.api import NetHackAPI
 from src.config import AgentConfig, load_config
 from src.skills import SkillExecutor, SkillLibrary
@@ -47,11 +47,13 @@ def create_agent_for_run(
     )
     api.reset()
 
-    # Create LLM client with user's API key
+    # Create LLM client with user's API key. Web users sign in via OpenRouter
+    # OAuth, so these runs always use OpenRouter regardless of agent.provider.
+    openrouter_url = PROVIDER_BASE_URLS["openrouter"]
     llm = LLMClient(
         provider="openrouter",
         model=model,
-        base_url=config.agent.base_url,
+        base_url=openrouter_url,
         temperature=temperature,
         api_key=api_key,
         reasoning=reasoning if reasoning != "none" else None,
@@ -66,7 +68,7 @@ def create_agent_for_run(
     agent_config = AgentConfig(
         provider="openrouter",
         model=model,
-        base_url=config.agent.base_url,
+        base_url=openrouter_url,
         temperature=temperature,
         reasoning=reasoning,
         max_turns=max_turns,

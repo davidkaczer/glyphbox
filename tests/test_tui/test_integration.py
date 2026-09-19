@@ -43,12 +43,12 @@ class TestTUIIntegration:
             # Check widgets are present
             decision_log = tui_app.query_one("#decision-log")
             game_screen = tui_app.query_one("#game-screen")
-            stats_bar = tui_app.query_one("#stats-bar")
+            message_log = tui_app.query_one("#message-log")
             controls = tui_app.query_one("#controls")
 
             assert decision_log is not None
             assert game_screen is not None
-            assert stats_bar is not None
+            assert message_log is not None
             assert controls is not None
 
     @pytest.mark.timeout(60)

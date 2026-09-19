@@ -28,8 +28,8 @@ def test_basic_completion():
         client = create_client_from_config(config)
     except ValueError as e:
         print(f"ERROR: {e}")
-        print("\nMake sure OPENROUTER_API_KEY is set:")
-        print("  export OPENROUTER_API_KEY='your-key-here'")
+        print("\nMake sure your provider's API key is set, e.g.:")
+        print("  export OPENAI_API_KEY='your-key-here'")
         return 1
 
     # Test a simple completion

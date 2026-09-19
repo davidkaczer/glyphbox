@@ -517,6 +517,11 @@ class NetHackAPI:
             return ""
         return get_message(self.observation)
 
+    @property
+    def message_count(self) -> int:
+        """Total number of messages recorded this game (see get_messages)."""
+        return len(self._message_history)
+
     def get_messages(self, n: int = 10) -> list[str]:
         """Get the last n game messages."""
         return self._message_history[-n:]

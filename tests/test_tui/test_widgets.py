@@ -4,8 +4,9 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from src.tui.widgets import (
-    StatsBar,
     GameScreenWidget,
+    InventoryPanel,
+    MessageLog,
     DecisionLogWidget,
     ReasoningPanel,
     ControlsWidget,
@@ -19,22 +20,36 @@ from src.tui.events import (
 from src.agent.parser import ActionType, AgentDecision
 
 
-class TestStatsBar:
-    """Tests for StatsBar widget."""
+class TestMessageLog:
+    """Tests for MessageLog widget."""
 
     def test_creation(self):
-        """Test creating a StatsBar widget."""
-        widget = StatsBar()
-        assert widget._hp == 0
-        assert widget._max_hp == 0
-        assert widget._turn == 0
+        """Test creating a MessageLog widget."""
+        widget = MessageLog()
+        assert widget.border_title == "Messages"
+        assert widget.max_lines == 1000
 
-    def test_default_values(self):
-        """Test default values are set correctly."""
-        widget = StatsBar()
-        assert widget._level == 1
-        assert widget._score == 0
-        assert widget._hunger == "Not Hungry"
+
+class TestInventoryPanel:
+    """Tests for InventoryPanel widget."""
+
+    def test_render_groups_in_pack_order(self):
+        """Items are grouped under class headings in NetHack's pack order."""
+        from src.api.models import BUCStatus, Item, ObjectClass
+
+        items = [
+            Item(glyph=0, name="uncursed food ration", slot="d", object_class=ObjectClass.FOOD),
+            Item(glyph=0, name="+1 long sword (weapon in hand)", slot="a",
+                 object_class=ObjectClass.WEAPON, equipped=True),
+            Item(glyph=0, name="cursed ring of teleportation", slot="e",
+                 object_class=ObjectClass.RING, buc_status=BUCStatus.CURSED),
+        ]
+        text = InventoryPanel._render_items(items).plain
+        assert text.index("Weapons") < text.index("Comestibles") < text.index("Rings")
+        assert "a - +1 long sword (weapon in hand)" in text
+
+    def test_render_empty(self):
+        assert InventoryPanel._render_items([]).plain == "(empty)"
 
 
 class TestGameScreenWidget:
@@ -84,26 +99,6 @@ class TestControlsWidget:
 
 class TestWidgetEventHandling:
     """Tests for widget event handling logic."""
-
-    def test_stats_bar_hp_color_coding(self):
-        """Test HP color coding logic in StatsBar."""
-        widget = StatsBar()
-
-        # High HP (> 50%)
-        widget._hp = 15
-        widget._max_hp = 20
-        ratio = widget._hp / widget._max_hp
-        assert ratio > 0.5  # Should be green
-
-        # Medium HP (25-50%)
-        widget._hp = 8
-        ratio = widget._hp / widget._max_hp
-        assert 0.25 < ratio <= 0.5  # Should be yellow
-
-        # Low HP (< 25%)
-        widget._hp = 4
-        ratio = widget._hp / widget._max_hp
-        assert ratio <= 0.25  # Should be red
 
     def test_game_screen_update(self):
         """Test game screen stores screen data."""

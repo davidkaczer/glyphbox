@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from .events import (
     AgentStatusChanged,
     DecisionMade,
+    GameMessages,
     GameStateUpdated,
     SkillExecuted,
 )
@@ -62,6 +63,8 @@ class TUIAgentRunner:
         self._task: Optional[asyncio.Task] = None
         self._screen_task: Optional[asyncio.Task] = None
         self._running = False
+        # How many of the API's recorded messages have been sent to the message log
+        self._messages_emitted = 0
 
     async def start(self) -> None:
         """Start the agent loop in background."""
@@ -71,6 +74,11 @@ class TUIAgentRunner:
 
         self._running = True
         self.agent.start_episode(self.api)
+        # The opening message (e.g. "welcome to NetHack!") is on screen but not yet recorded
+        self._messages_emitted = self.api.message_count
+        opening = self.api.get_message()
+        if opening:
+            self.app.post_message(GameMessages(messages=[opening], turn=self.api.turn))
         self._task = asyncio.create_task(self._run_loop())
         self._screen_task = asyncio.create_task(self._screen_refresh_loop())
         self.app.post_message(AgentStatusChanged(status="running"))
@@ -146,7 +154,12 @@ class TUIAgentRunner:
                 end_reason = "too many errors"
 
             self.agent.end_episode(end_reason)
-            self.app.post_message(AgentStatusChanged(status="stopped"))
+            if end_reason == "too many errors":
+                self.app.post_message(
+                    AgentStatusChanged(status="error", error_message=self.agent.state.last_error)
+                )
+            else:
+                self.app.post_message(AgentStatusChanged(status="stopped"))
             logger.info(f"Agent stopped: {end_reason}")
 
         except asyncio.CancelledError:
@@ -189,10 +202,23 @@ class TUIAgentRunner:
                     score=stats.score,
                     message=message,
                     hunger=stats.hunger.value if hasattr(stats.hunger, "value") else str(stats.hunger),
+                    inventory=self.api.get_inventory(),
                 )
             )
+            self._emit_new_messages(stats.turn)
         except Exception as e:
             logger.warning(f"Failed to emit game state: {e}")
+
+    def _emit_new_messages(self, turn: int) -> None:
+        """Send messages recorded since the last call to the message log."""
+        count = self.api.message_count
+        if count < self._messages_emitted:
+            # History was cleared (new game)
+            self._messages_emitted = 0
+        new = count - self._messages_emitted
+        if new > 0:
+            self.app.post_message(GameMessages(messages=self.api.get_messages(new), turn=turn))
+            self._messages_emitted = count
 
     def pause(self) -> None:
         """Pause the agent."""
@@ -276,6 +302,8 @@ async def create_watched_agent(
         model=config.agent.model,
         base_url=config.agent.base_url,
         temperature=config.agent.temperature,
+        reasoning=config.agent.reasoning,
+        openai_api=config.agent.openai_api,
     )
 
     # Clear custom skills from previous runs (start fresh each time)
